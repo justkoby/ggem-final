@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1350" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1350px; overflow: hidden; background: #000; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #62b8e8; }
+      /* Camera: one transformed world, 1 unit = 1 px of the 1080x1350 poster. */
+      #cam { position: absolute; left: 0; top: 0; width: 1080px; height: 1350px; transform-origin: 0 0; }
+      #clouds { will-change: transform; }
+      #cam img { position: absolute; display: block; }
+      /* Every SVG export shares a 1122.38-wide artboard whose origin sits 10px left of the poster (fitted by template matching). */
+      .art { left: -10px; top: 0; width: 1122.38px; height: 1349.1px; }
+      .art.tall { height: 1360.16px; }
+      .full { left: 0; top: 0; width: 1080px; height: 1350px; }
+      .crop { position: absolute; overflow: hidden; }
+      #car-wrap { position: absolute; left: 0; top: 0; width: 1080px; height: 1350px; transform-origin: 450px 1195px; }
+      #car { transform-origin: 450px 1195px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main-v2" data-start="0" data-duration="24" data-width="1080" data-height="1350">
+      <div id="cam">
+        <img class="full" src="../assets/blue-background.jpg" alt="" />
+        <img id="clouds" class="full" src="../assets/clouds.svg" alt="" />
+        <img class="art" src="../assets/road.svg" alt="" />
+        <img class="art" src="../assets/signboard.svg" alt="" />
+        <div id="car-wrap"><img id="car" class="art" src="../assets/car.svg" alt="" /></div>
+        <img id="date" class="art tall" src="../assets/date-venue.svg" alt="" />
+
+        <!-- activities.svg also carries the date text, so crop to the left column -->
+        <div class="crop" style="left:0;top:0;width:545px;height:1350px">
+          <img id="act" class="art tall" src="../assets/activities.svg" alt="" />
+        </div>
+
+        <!-- title: one locked group -->
+        <img id="title" class="art tall" src="../assets/main-climax-logo.svg" alt="" />
+
+        <div id="spons" class="crop" style="left:0;top:1240px;width:1080px;height:110px">
+          <img class="art tall" style="top:-1240px" src="../assets/partmer-sponsors.svg" alt="" />
+        </div>
+        <img id="logos" src="../assets/logos-on-top.png" alt="" style="left:290px;top:32px;width:474px" />
+      </div>
+      <img id="poster" class="full" src="../assets/main-poster.jpg" alt="" style="position:absolute;opacity:0" />
+    </div>
+    <script>
+      const W = 1122.38;
+      const inset = (t, r, b, l) => `inset(${t}px ${r}px ${b}px ${l}px)`;
+      const tl = gsap.timeline({ paused: true });
+      const $ = (id) => document.getElementById(id);
+
+      // ---- continuous camera: waypoint moves are summed, so overlaps carry momentum ----
+      const WP = [[540, 880, 1.46], [545, 880, 1.5], [775, 705, 1.9], [305, 650, 2.2], [397, 470, 1.45], [540, 675, 1]];
+      const MOVES = [ // [start, duration, ease]  move i goes WP[i] -> WP[i+1]
+        [0, 4.6, "sine.inOut"], [3.7, 2.3, "power3.inOut"], [7.8, 2.1, "power3.inOut"],
+        [11.9, 2.1, "power3.inOut"], [15.5, 2.8, "power3.inOut"],
+      ].map(([s, d, e]) => ({ s, d, f: gsap.parseEase(e) }));
+      const camAt = (t) => {
+        let cx = WP[0][0], cy = WP[0][1], z = Math.log(WP[0][2]);
+        MOVES.forEach((m, i) => {
+          const p = Math.min(1, Math.max(0, (t - m.s) / m.d)), e = m.f(p), a = WP[i], b = WP[i + 1];
+          cx += (b[0] - a[0]) * e; cy += (b[1] - a[1]) * e; z += (Math.log(b[2]) - Math.log(a[2])) * e;
+        });
+        return [cx, cy, Math.exp(z)];
+      };
+      const carScale = gsap.getProperty("#car-wrap");
+      const smooth = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+
+      // every procedural element is a pure function of t, so seeking and rendering agree
+      function apply(t) {
+        const [cx, cy, k] = camAt(t);
+        const [px, py] = camAt(t + 0.02), [qx, qy] = camAt(t - 0.02);
+        const speed = Math.hypot(px - qx, py - qy) * k / 0.04;                    // screen px / s
+        const blur = Math.min(1.6, Math.max(0, speed - 250) / 500);               // only on fast moves
+        $("cam").style.transform = `translate(${540 - cx * k}px, ${675 - cy * k}px) scale(${k})`;
+        $("cam").style.filter = blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : "none";
+        // clouds: slow drift that ends at 0, plus parallax against the camera
+        $("clouds").style.transform = `translate(${-30 * (1 - smooth(t / 18.4)) + (cx - 540) * 0.15}px, ${(cy - 675) * 0.08}px)`;
+        // van: damped bounce + wiggle, fading to exactly zero by 18.4s
+        const u = Math.min(1, t / 18.4), env = 5 * Math.pow(1 - u, 2) * Math.max(0.35, carScale("scale"));
+        $("car").style.transform = `translateY(${(-env * Math.abs(Math.sin(Math.PI * t / 0.62))).toFixed(3)}px) rotate(${(env * 0.07 * Math.sin(2 * Math.PI * t / 1.7 + 1)).toFixed(4)}deg)`;
+      }
+      const P = { _t: 0, get t() { return this._t; }, set t(v) { this._t = v; apply(v); } };
+      tl.to(P, { t: 24, duration: 24, ease: "none" }, 0);
+
+      // ---- 0-4s: van approaches from up the road, anchored at its tyres, always visible ----
+      tl.fromTo("#car-wrap", { scale: 0.12, x: 55, y: -35 }, { scale: 1, x: 0, y: 0, duration: 4.4, ease: "power2.out" }, 0);
+
+      // ---- 4-8s: date and venue (unchanged) ----
+      gsap.set("#date", { clipPath: inset(0, 572, 0, 0), opacity: 0 });
+      tl.to("#date", { opacity: 1, duration: 0.4, ease: "none" }, 4.8);
+      tl.to("#date", { clipPath: inset(0, 134, 0, 0), duration: 1.6, ease: "power2.inOut" }, 4.8);
+      tl.set("#date", { clipPath: "none" }, 6.6);
+
+      // ---- 8-12s: activities as one composition, one flowing wipe as the camera arrives ----
+      gsap.set("#act", { clipPath: inset(0, W - 90, 0, 0), opacity: 0 });
+      tl.to("#act", { opacity: 1, duration: 0.5, ease: "none" }, 8.5);
+      tl.fromTo("#act", { x: -40 }, { x: 0, duration: 1.6, ease: "power3.out" }, 8.5);
+      tl.to("#act", { clipPath: inset(0, W - 562, 0, 0), duration: 1.6, ease: "power2.inOut" }, 8.5);
+      tl.set("#act", { clipPath: "none" }, 10.3);
+
+      // ---- 12-16s: title as one locked group, one move, brief glitch on landing ----
+      gsap.set("#title", { opacity: 0, transformOrigin: "400px 330px" });
+      tl.fromTo("#title", { y: 60, scale: 1.12 }, { y: 0, scale: 1, duration: 0.9, ease: "power3.out" }, 12.8);
+      tl.to("#title", { opacity: 1, duration: 0.3, ease: "none" }, 12.8);
+      const fx = (r, c) => `drop-shadow(${r}px 0 0 rgba(255,40,90,.8)) drop-shadow(${-r}px 0 0 rgba(0,225,255,.8))`;
+      tl.set("#title", { filter: fx(0, 0) }, 13.48);
+      tl.to("#title", { keyframes: [
+        { x: -7, filter: fx(-4), duration: 0.04, ease: "none" },
+        { x: 6, filter: fx(4), duration: 0.05, ease: "none" },
+        { x: -3, filter: fx(-2), duration: 0.05, ease: "none" },
+        { x: 0, filter: fx(0), duration: 0.06, ease: "none" },
+      ] }, 13.5);
+      tl.set("#title", { filter: "none" }, 13.72);
+
+      // ---- 16-19s: organisers and sponsors arrive as the camera pulls back ----
+      gsap.set("#logos", { opacity: 0 });
+      gsap.set("#spons", { opacity: 0 });
+      tl.fromTo("#logos", { y: -24 }, { y: 0, opacity: 1, duration: 1.2, ease: "power2.out" }, 16.4);
+      tl.fromTo("#spons", { y: 110 }, { y: 0, opacity: 1, duration: 1.2, ease: "power2.out" }, 16.9);
+
+      // ---- 19-24s: exact poster takes over once layers are settled; 5s hold ----
+      tl.to("#poster", { opacity: 1, duration: 0.6, ease: "none" }, 18.8);
+
+      apply(0);
+      window.__timelines["main-v2"] = tl;
+    </script>
+  </body>
+</html>

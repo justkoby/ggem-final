@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1350" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1350px; overflow: hidden; background: #000; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #62b8e8; }
+      /* Camera: one transformed world, 1 unit = 1 px of the 1080x1350 poster. */
+      #cam { position: absolute; left: 0; top: 0; width: 1080px; height: 1350px; transform-origin: 0 0; }
+      #cam img { position: absolute; display: block; }
+      /* Every SVG export shares a 1122.38-wide artboard whose origin sits 10px left of the poster. */
+      .art { left: -10px; top: 0; width: 1122.38px; height: 1349.1px; }
+      .art.tall { height: 1360.16px; }
+      .full { left: 0; top: 0; width: 1080px; height: 1350px; }
+      .crop { position: absolute; overflow: hidden; }
+      #car-wrap { position: absolute; left: 0; top: 0; width: 1080px; height: 1350px; }
+      #car { transform-origin: 450px 1195px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="assembly" data-start="0" data-duration="18" data-width="1080" data-height="1350">
+      <div id="cam">
+        <img class="full" src="assets/blue-background.jpg" alt="" />
+        <!-- clouds split into four non-overlapping groups (no cloud crosses x=540 or y=900) so each can move at its own speed -->
+        <img id="c-lt" class="full cloud" src="assets/clouds.svg" alt="" style="clip-path:inset(0px 540px 450px 0px)" />
+        <img id="c-lb" class="full cloud" src="assets/clouds.svg" alt="" style="clip-path:inset(900px 540px 0px 0px)" />
+        <img id="c-rt" class="full cloud" src="assets/clouds.svg" alt="" style="clip-path:inset(0px 0px 450px 540px)" />
+        <img id="c-rb" class="full cloud" src="assets/clouds.svg" alt="" style="clip-path:inset(900px 0px 0px 540px)" />
+        <div id="road-wrap" style="position:absolute;left:0;top:0;width:1080px;height:1350px">
+          <!-- continues the road black below its artboard edge so no blue shows under the camera before the sponsor bar covers it -->
+          <div style="position:absolute;left:-10px;top:1290px;width:1122px;height:80px;background:#050505"></div>
+          <img id="road" class="art" src="assets/road.svg" alt="" />
+        </div>
+        <img id="sign" class="art" src="assets/signboard.svg" alt="" />
+        <div id="car-wrap"><img id="car" class="art" src="assets/car.svg" alt="" /></div>
+        <img id="date" class="art tall" src="assets/date-venue.svg" alt="" />
+        <!-- activities.svg also carries the date text, so crop to the left column -->
+        <div class="crop" style="left:0;top:0;width:545px;height:1350px">
+          <img id="act" class="art tall" src="assets/activities.svg" alt="" />
+        </div>
+        <img id="title" class="art tall" src="assets/main-climax-logo.svg" alt="" />
+        <svg id="routes" viewBox="0 0 1080 1350" width="1080" height="1350" style="position:absolute;left:0;top:0;pointer-events:none;display:none">
+          <path id="r1" d="M505 745 C455 778 380 724 300 752 S190 792 140 764" fill="none" />
+          <path id="r2" d="M140 764 C95 742 58 705 55 640 S40 420 52 300 S75 165 150 120" fill="none" />
+          <g id="g1" style="filter:drop-shadow(0 1px 2px rgba(0,50,110,.35))"></g>
+          <g id="g2" style="filter:drop-shadow(0 1px 2px rgba(0,50,110,.35))"></g>
+        </svg>
+        <div id="spons" class="crop" style="left:0;top:1240px;width:1080px;height:110px"></div>
+        <div id="logos"></div>
+      </div>
+      <img id="poster" class="full" src="assets/main-poster.jpg" alt="" style="position:absolute;opacity:0" />
+    </div>
+    <script>
+      const W = 1122.38, END = 14.2; // every ambient motion is exactly zero from END on
+      const inset = (t, r, b, l) => `inset(${t}px ${r}px ${b}px ${l}px)`;
+      const tl = gsap.timeline({ paused: true });
+      const $ = (id) => document.getElementById(id);
+      const smooth = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+
+      // logos / sponsors: cut at the gaps between logos, revealed in a wave, then swapped for the single original file
+      function columns(host, src, cls, style, cuts, total) {
+        const edges = [0, ...cuts, total];
+        const mk = (extra) => { const im = document.createElement("img"); im.className = cls; im.src = src; im.style.cssText = style + extra; host.appendChild(im); return im; };
+        const full = mk("opacity:0"), cols = [];
+        for (let i = 0; i < edges.length - 1; i++) cols.push(mk(`clip-path:${inset(0, total - edges[i + 1], 0, edges[i])};opacity:0`));
+        return { full, cols };
+      }
+      const logos = columns($("logos"), "assets/logos-on-top.png", "", "position:absolute;left:290px;top:32px;width:474px;", [159, 398], 474);
+      const spons = columns($("spons"), "assets/partmer-sponsors.svg", "art tall", "top:-1240px;", [175, 263, 357, 465, 617, 762, 901, 1005], W);
+
+      // ---- one continuous camera: moves are summed, so overlaps carry momentum ----
+      const WP = [[540, 675, 1], [560, 700, 1.05], [708, 720, 1.45], [340, 660, 1.6], [460, 562, 1.2], [540, 675, 1]];
+      const MOVES = [[0, 3.2, "sine.inOut"], [2.8, 2.0, "power3.inOut"], [6.5, 2.0, "power3.inOut"], [9.9, 1.9, "power3.inOut"], [12.4, 1.9, "power3.inOut"]]
+        .map(([s, d, e]) => ({ s, d, f: gsap.parseEase(e) }));
+      const camAt = (t) => {
+        let cx = WP[0][0], cy = WP[0][1], z = Math.log(WP[0][2]);
+        MOVES.forEach((m, i) => {
+          const e = m.f(Math.min(1, Math.max(0, (t - m.s) / m.d))), a = WP[i], b = WP[i + 1];
+          cx += (b[0] - a[0]) * e; cy += (b[1] - a[1]) * e; z += (Math.log(b[2]) - Math.log(a[2])) * e;
+        });
+        return [cx, cy, Math.exp(z)];
+      };
+      // clouds: [id, start dx, start dy, drift duration, parallax factor, side]. Top groups rise and bottom groups sink (drifting apart);
+      // horizontal moves only ever travel outward from the artwork edge so no cut edge is exposed.
+      const CLOUDS = [["c-lt", -60, 110, 3.4, 0.18, -1], ["c-lb", -40, -90, 2.6, 0.10, -1], ["c-rt", 60, 140, 3.8, 0.22, 1], ["c-rb", 40, -80, 2.8, 0.12, 1]];
+      const easeOut = gsap.parseEase("power3.out"), LAND = 2.4;
+
+      // every procedural element is a pure function of t, so seeking and rendering agree
+      function apply(t) {
+        const [cx, cy, k] = camAt(t);
+        $("cam").style.transform = `translate(${540 - cx * k}px, ${675 - cy * k}px) scale(${k})`;
+        const idle = 1 - smooth(t / END);
+        CLOUDS.forEach(([id, dx, dy, d, par, side]) => {
+          const r = 1 - easeOut(Math.min(1, t / d));
+          $(id).style.transform = `translate(${dx * r + (cx - 540) * par + side * 9 * idle * (1 - Math.cos(t * 0.7 + dx)) / 2}px, ${dy * r + (cy - 675) * 0.08}px)`;
+        });
+        // van: down-only suspension (never lifts off the road): landing impact + a quieter idle bob, both zero by END
+        const tc = t - LAND, impact = tc > 0 ? 7 * Math.exp(-2.6 * tc) * (1 - Math.cos(2 * Math.PI * tc / 0.75)) / 2 : 0;
+        const env = t > LAND ? 2.6 * (1 - smooth((t - 4) / (END - 4))) : 0;
+        const bob = env * (1 - Math.cos(2 * Math.PI * t / 1.1)) / 2;
+        const rot = (tc > 0 ? 0.5 * Math.exp(-2.6 * tc) * Math.sin(2 * Math.PI * tc / 0.75) : 0) + 0.18 * env * Math.sin(2 * Math.PI * t / 1.7);
+        $("car").style.transform = `translateY(${(impact + bob).toFixed(3)}px) rotate(${rot.toFixed(4)}deg)`;
+      }
+      // ---- temporary dotted routes: dots sampled along each path, revealed progressively with a travelling pulse ----
+      const ROUTES = [["r1", "g1", 6.3, 1.4, 8.3, 8.9], ["r2", "g2", 9.7, 1.3, 10.8, 11.3]]; // [path, group, draw start, draw dur, fade start, fade end]
+      const NS = "http://www.w3.org/2000/svg", routeDots = ROUTES.map(([pid, gid]) => {
+        const path = $(pid), len = path.getTotalLength(), n = Math.floor(len / 17) + 1, dots = [];
+        for (let i = 0; i < n; i++) {
+          const pt = path.getPointAtLength(len * i / (n - 1)), c = document.createElementNS(NS, "circle");
+          c.setAttribute("cx", pt.x.toFixed(2)); c.setAttribute("cy", pt.y.toFixed(2)); c.setAttribute("r", 4); c.setAttribute("fill", "#fff");
+          $(gid).appendChild(c); dots.push(c);
+        }
+        return dots;
+      });
+      const drawEase = gsap.parseEase("power2.inOut");
+      function applyRoutes(t) {
+        let any = false;
+        ROUTES.forEach(([, gid, t0, d, f0, f1], r) => {
+          const dots = routeDots[r], n = dots.length, live = t >= t0 && t < f1;
+          $(gid).style.display = live ? "" : "none";
+          if (!live) return;
+          any = true;
+          const prog = drawEase(Math.min(1, (t - t0) / d)), fade = 1 - smooth((t - f0) / (f1 - f0));
+          const pulse = ((t - t0) * 0.75) % 1.25;                              // travelling highlight, start -> end
+          dots.forEach((c, i) => {
+            const f = i / (n - 1), appear = smooth((prog * (n + 3) - i) / 3), boost = Math.exp(-Math.pow((f - pulse) / 0.07, 2));
+            c.setAttribute("opacity", (appear * fade * (0.8 + 0.2 * boost)).toFixed(3));
+            c.setAttribute("r", (3.6 * (1 + 0.7 * boost * appear)).toFixed(2));
+          });
+        });
+        $("routes").style.display = any ? "" : "none";
+      }
+      const P = { _t: 0, get t() { return this._t; }, set t(v) { this._t = v; apply(v); applyRoutes(v); } };
+      tl.to(P, { t: 18, duration: 18, ease: "none" }, 0);
+
+      // ---- 0-3s: road and the van on it rise together; the van is grounded from the first frame ----
+      tl.fromTo(["#road-wrap", "#car-wrap"], { y: 620 }, { y: 0, duration: 2.2, ease: "power3.out" }, 0.2);
+
+      // ---- 3-7s: board + pole + date swing in together; car softens behind; text stays sharp ----
+      gsap.set(["#sign", "#date"], { opacity: 0, transformOrigin: "855px 1240px" });
+      tl.fromTo(["#sign", "#date"], { rotation: -13 }, { rotation: 0, duration: 1.1, ease: "back.out(1.8)" }, 3.0);
+      tl.to(["#sign", "#date"], { opacity: 1, duration: 0.3, ease: "none" }, 3.0);
+      gsap.set("#date", { clipPath: inset(0, 572, 0, 0) });
+      tl.to("#date", { clipPath: inset(0, 134, 0, 0), duration: 1.4, ease: "power2.inOut" }, 4.0);
+      tl.set("#date", { clipPath: "none" }, 5.5);
+      tl.fromTo("#car-wrap", { filter: "blur(0px)" }, { filter: "blur(3px)", duration: 1.0, ease: "power2.inOut" }, 3.6);
+
+      // ---- 7-10s: activities slide and reveal as one block; board softens ----
+      gsap.set("#act", { clipPath: inset(0, W - 90, 0, 0), opacity: 0 });
+      tl.to("#act", { opacity: 1, duration: 0.4, ease: "none" }, 7.5);
+      tl.fromTo("#act", { x: -50 }, { x: 0, duration: 1.3, ease: "power3.out" }, 7.5);
+      tl.to("#act", { clipPath: inset(0, W - 562, 0, 0), duration: 1.3, ease: "power2.inOut" }, 7.5);
+      tl.set("#act", { clipPath: "none" }, 8.9);
+      tl.fromTo("#act", { filter: "blur(0px)" }, { filter: "blur(2px)", duration: 0.7, ease: "power2.inOut", immediateRender: false }, 10.0);
+      tl.fromTo(["#sign", "#date"], { filter: "blur(0px)" }, { filter: "blur(2px)", duration: 0.8, ease: "power2.inOut", immediateRender: false }, 6.3);
+
+      // ---- 10-13s: title enters as one locked group while the camera starts pulling back ----
+      gsap.set("#title", { opacity: 0, transformOrigin: "400px 330px" });
+      tl.fromTo("#title", { y: 80, scale: 1.3 }, { y: 0, scale: 1, duration: 0.65, ease: "power4.out" }, 11.1);
+      tl.to("#title", { opacity: 1, duration: 0.15, ease: "none" }, 11.1);
+      const fx = (r) => `drop-shadow(${r}px 0 0 rgba(255,40,90,.8)) drop-shadow(${-r}px 0 0 rgba(0,225,255,.8))`;
+      tl.set("#title", { filter: fx(0) }, 11.68);
+      tl.to("#title", { keyframes: [
+        { x: -7, filter: fx(-4), duration: 0.04, ease: "none" },
+        { x: 6, filter: fx(4), duration: 0.05, ease: "none" },
+        { x: -3, filter: fx(-2), duration: 0.05, ease: "none" },
+        { x: 0, filter: fx(0), duration: 0.06, ease: "none" },
+      ] }, 11.7);
+      tl.set("#title", { filter: "none" }, 11.92);
+
+      // ---- 13-15s: depth blur is gone, logos and sponsors wave in, everything settles ----
+      tl.to(["#car-wrap", "#sign", "#date", "#act"], { filter: "blur(0px)", duration: 0.8, ease: "power2.inOut" }, 11.2);
+      tl.set(["#car-wrap", "#sign", "#date", "#act"], { filter: "none" }, 12.1);
+      const wave = (set, t0, gap) => {
+        set.cols.forEach((c, i) => tl.fromTo(c, { y: 40 }, { y: 0, opacity: 1, duration: 0.55, ease: "power3.out" }, t0 + i * gap));
+        tl.set(set.full, { opacity: 1 }, 14.3);
+        tl.set(set.cols, { opacity: 0 }, 14.3);
+      };
+      wave(logos, 12.8, 0.1);
+      wave(spons, 13.2, 0.06);
+
+      // ---- 15-18s: exact poster takes over once layers are settled; 3s+ hold ----
+      tl.to("#poster", { opacity: 1, duration: 0.4, ease: "none" }, 14.4);
+
+      apply(0); applyRoutes(0);
+      window.__timelines["assembly"] = tl;
+    </script>
+  </body>
+</html>

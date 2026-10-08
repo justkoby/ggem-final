@@ -7,3 +7,8 @@
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Animation project scratch
+snapshots/
+node_modules/
+.*.hf-transaction-*/
