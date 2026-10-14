@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1350" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1350px; overflow: hidden; background: #000; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #c8282d; }
+      /* Camera: one transformed world, 1 unit = 1 px of the 1080x1350 flyer. */
+      #cam { position: absolute; left: 0; top: 0; width: 1080px; height: 1350px; transform-origin: 0 0; }
+      #cam > img, #cam .layer img { position: absolute; display: block; }
+      .full { left: 0; top: 0; width: 1080px; height: 1350px; }
+      /* Every SVG shares a 1141.75-wide artboard; each layer's offset into the flyer was fitted individually. */
+      .a1371 { width: 1141.75px; height: 1371.41px; }
+      .a1383 { width: 1141.75px; height: 1383.45px; }
+      .a1373 { width: 1141.75px; height: 1373.65px; }
+      .layer { position: absolute; left: 0; top: 0; width: 1080px; height: 1350px; }
+      #car-wrap { transform-origin: 550px 1245px; }
+      #car { transform-origin: 550px 1245px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="aasu" data-start="0" data-duration="20" data-width="1080" data-height="1350">
+      <div id="cam">
+        <img class="full" src="assets/background.jpg" alt="" />
+        <img id="clouds" class="full" src="assets/red-clouds.svg" alt="" />
+        <!-- the small cloud beside "tour" is not in any supplied SVG, so it is lifted from the flyer image with a feathered mask -->
+        <div id="cloudpatch" style="position:absolute;left:185px;top:424px;width:100px;height:44px;background:url(assets/final-poster.jpg) -185px -424px/1080px 1350px no-repeat;-webkit-mask-image:radial-gradient(ellipse closest-side,#000 72%,transparent 100%);mask-image:radial-gradient(ellipse closest-side,#000 72%,transparent 100%)"></div>
+        <div id="bld" class="layer"><img class="a1371" style="left:-28px;top:-17px" src="assets/silhouette-buildings.svg" alt="" /></div>
+        <div id="sign" class="layer"><img class="a1383" style="left:-28px;top:-17px" src="assets/green-billboard.svg" alt="" /></div>
+        <div id="car-wrap" class="layer"><div id="car" class="layer"><img class="a1383" style="left:-28px;top:-17px" src="assets/car.svg" alt="" /></div></div>
+        <div id="date" class="layer"><img class="a1383" style="left:-30px;top:-18px" src="assets/date-venue.svg" alt="" /></div>
+        <div id="actbox" class="layer" style="width:560px;overflow:hidden"></div>
+        <img id="title" class="a1371" style="position:absolute;left:-29px;top:-13px" src="assets/main-logo.svg" alt="" />
+        <img id="bulb" class="a1371" style="position:absolute;left:-29px;top:-13px;opacity:0" src="assets/main-logo.svg" alt="" />
+        <div id="logos" class="layer"></div>
+        <div id="foot" class="layer"><img style="left:-25.1px;top:-30.1px;width:1146.3px;height:1379.1px" src="assets/socials.svg" alt="" /></div>
+        <svg id="routes" viewBox="0 0 1080 1350" width="1080" height="1350" style="position:absolute;left:0;top:0;pointer-events:none;display:none">
+          <path id="r1" d="M262 926 C340 884 440 858 520 776" fill="none" />
+          <path id="r2" d="M520 776 C526 740 528 696 518 660 S440 642 332 642" fill="none" />
+          <path id="r3" d="M332 642 C400 630 415 575 370 545 C310 520 210 530 168 482 C140 448 150 408 188 376" fill="none" />
+          <g id="g1"></g><g id="g2"></g><g id="g3"></g>
+        </svg>
+      </div>
+      <img id="poster" class="full" src="assets/final-poster.jpg" alt="" style="position:absolute;opacity:0" />
+    </div>
+    <script>
+      const W = 1141.75, H = 1371.41;
+      const inset = (t, r, b, l) => `inset(${t}px ${r}px ${b}px ${l}px)`;
+      const tl = gsap.timeline({ paused: true });
+      const $ = (id) => document.getElementById(id);
+      const smooth = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+      const mkImg = (host, src, style) => { const im = document.createElement("img"); im.src = src; im.style.cssText = "position:absolute;" + style; host.appendChild(im); return im; };
+
+      // activities: whole-artwork copies clipped into rows, revealed in sequence, then swapped for the single original
+      const ACT = [[575, 642], [642, 680], [680, 723], [723, 805]];
+      const actFull = mkImg($("actbox"), "assets/activities.svg", "left:-28px;top:-17px;width:1141.75px;height:1371.41px;opacity:0");
+      const actRows = ACT.map(([y0, y1]) => mkImg($("actbox"), "assets/activities.svg", `left:-28px;top:-17px;width:1141.75px;height:1371.41px;opacity:0;clip-path:${inset(y0, W - 80, H - y1, 0)}`));
+
+      // organiser logos: cut in the gaps between logos, revealed as the frame widens, then the single original is swapped in
+      const logoCuts = [0, 484, 653, 754, W];
+      const logoFull = mkImg($("logos"), "assets/logos-on-top.svg", "left:-31px;top:-41px;width:1141.75px;height:1371.41px;opacity:0");
+      const logoCols = logoCuts.slice(0, -1).map((l, i) => mkImg($("logos"), "assets/logos-on-top.svg", `left:-31px;top:-41px;width:1141.75px;height:1371.41px;opacity:0;clip-path:${inset(0, W - logoCuts[i + 1], 0, l)}`));
+
+      // ---- one continuous camera: moves are summed, so overlaps carry momentum ----
+      const WP = [[560, 900, 1.5], [572, 895, 1.52], [708, 722, 1.45], [340, 690, 1.6], [470, 587, 1.15], [540, 675, 1]];
+      const MOVES = [[0, 3.0, "sine.inOut"], [3.1, 1.9, "power3.inOut"], [7.2, 1.9, "power3.inOut"], [10.6, 1.9, "power3.inOut"], [13.8, 1.9, "power3.inOut"]]
+        .map(([s, d, e]) => ({ s, d, f: gsap.parseEase(e) }));
+      const camAt = (t) => {
+        let cx = WP[0][0], cy = WP[0][1], z = Math.log(WP[0][2]);
+        MOVES.forEach((m, i) => {
+          const e = m.f(Math.min(1, Math.max(0, (t - m.s) / m.d))), a = WP[i], b = WP[i + 1];
+          cx += (b[0] - a[0]) * e; cy += (b[1] - a[1]) * e; z += (Math.log(b[2]) - Math.log(a[2])) * e;
+        });
+        return [cx, cy, Math.exp(z)];
+      };
+
+      // ---- temporary dotted routes: rounded dots drawn progressively, a bigger leading dot, a travelling pulse ----
+      const ROUTES = [["r1", "g1", 3.0, 1.5, 5.0, 5.7], ["r2", "g2", 7.0, 1.4, 9.0, 9.7], ["r3", "g3", 10.4, 1.5, 14.0, 15.0]]; // [path, group, draw start, draw dur, fade start, fade end]
+      const NS = "http://www.w3.org/2000/svg", routeDots = ROUTES.map(([pid, gid]) => {
+        const path = $(pid), len = path.getTotalLength(), n = Math.floor(len / 17) + 1, dots = [];
+        for (let i = 0; i < n; i++) {
+          const pt = path.getPointAtLength(len * i / (n - 1)), c = document.createElementNS(NS, "circle");
+          c.setAttribute("cx", pt.x.toFixed(2)); c.setAttribute("cy", pt.y.toFixed(2)); c.setAttribute("r", 4); c.setAttribute("fill", "#fff");
+          $(gid).appendChild(c); dots.push(c);
+        }
+        return dots;
+      });
+      const drawEase = gsap.parseEase("power2.inOut");
+      function applyRoutes(t) {
+        let any = false;
+        ROUTES.forEach(([, gid, t0, d, f0, f1], r) => {
+          const dots = routeDots[r], n = dots.length, live = t >= t0 && t < f1;
+          $(gid).style.display = live ? "" : "none";
+          if (!live) return;
+          any = true;
+          const p = Math.min(1, (t - t0) / d), prog = drawEase(p), fade = 1 - smooth((t - f0) / (f1 - f0));
+          const pulse = ((t - t0) * 0.75) % 1.25;
+          dots.forEach((c, i) => {
+            const f = i / (n - 1), appear = smooth((prog * (n + 3) - i) / 3);
+            const lead = p < 1 ? Math.exp(-Math.pow((f - prog) / 0.03, 2)) : 0, boost = Math.exp(-Math.pow((f - pulse) / 0.07, 2));
+            c.setAttribute("opacity", (appear * fade * (0.8 + 0.2 * boost)).toFixed(3));
+            c.setAttribute("r", (3.6 * (1 + 0.6 * boost * appear + 0.9 * lead)).toFixed(2));
+          });
+        });
+        $("routes").style.display = any ? "" : "none";
+      }
+
+      // every procedural element is a pure function of t, so seeking and rendering agree
+      const END = 15.3; // ambient motion is exactly zero from here on
+      function apply(t) {
+        const [cx, cy, k] = camAt(t);
+        $("cam").style.transform = `translate(${540 - cx * k}px, ${675 - cy * k}px) scale(${k})`;
+        const idle = 1 - smooth(t / END), settle = 1 - smooth(t / 2.8);
+        const cl = `translate(${50 * settle + (cx - 540) * 0.12 + 8 * idle * (1 - Math.cos(t * 0.7)) / 2}px, ${(cy - 675) * 0.06}px)`;
+        $("clouds").style.transform = cl; $("cloudpatch").style.transform = cl;
+        $("bld").style.transform = `translate(${90 * settle - (cx - 540) * 0.05}px, 0)`;
+        // van: down-only bob + slight rocking about its tyre line; livelier while it drives in, zero by END
+        const env = 3.2 * idle + 2.6 * settle, bob = env * (1 - Math.cos(2 * Math.PI * t / 0.55)) / 2;
+        const rot = 0.12 * env * Math.sin(2 * Math.PI * t / 1.3 + 0.5);
+        $("car").style.transform = `translateY(${bob.toFixed(3)}px) rotate(${rot.toFixed(4)}deg)`;
+      }
+      const P = { _t: 0, get t() { return this._t; }, set t(v) { this._t = v; apply(v); applyRoutes(v); } };
+      tl.to(P, { t: 20, duration: 20, ease: "none" }, 0);
+
+      // ---- 0-3s: trotro drives in from the left, left to right, always visible and on the ground ----
+      tl.fromTo("#car-wrap", { x: -540 }, { x: 0, duration: 2.8, ease: "power3.out" }, 0);
+
+      // ---- 3-7s: board settles, date and venue revealed, trotro softens ----
+      tl.fromTo("#sign", { rotation: -2.5, scale: 0.97, transformOrigin: "905px 1060px" }, { rotation: 0, scale: 1, duration: 1.0, ease: "back.out(2)" }, 4.3);
+      gsap.set("#date", { clipPath: inset(0, 560, 0, 0), opacity: 0, transformOrigin: "905px 1060px" });
+      tl.fromTo("#date", { rotation: -2.5, scale: 0.97 }, { rotation: 0, scale: 1, duration: 1.0, ease: "back.out(2)", immediateRender: false }, 4.3);
+      tl.to("#date", { opacity: 1, duration: 0.4, ease: "none" }, 4.6);
+      tl.to("#date", { clipPath: inset(0, 30, 0, 0), duration: 1.5, ease: "power2.inOut" }, 4.8);
+      tl.set("#date", { clipPath: "none" }, 6.5);
+      tl.fromTo("#car-wrap", { filter: "blur(0px)" }, { filter: "blur(3px)", duration: 0.9, ease: "power2.inOut", immediateRender: false }, 4.0);
+
+      // ---- 7-11s: activities in sequence; board softens as they sharpen ----
+      tl.fromTo(["#sign", "#date"], { filter: "blur(0px)" }, { filter: "blur(2px)", duration: 0.8, ease: "power2.inOut", immediateRender: false }, 7.2);
+      actRows.forEach((el, i) => {
+        const [y0, y1] = ACT[i], t0 = 8.4 + i * 0.5;
+        gsap.set(el, { clipPath: inset(y0, W - 80, H - y1, 0), opacity: 0 });
+        tl.to(el, { opacity: 1, duration: 0.3, ease: "none" }, t0);
+        tl.fromTo(el, { x: -30 }, { x: 0, duration: 0.8, ease: "power3.out" }, t0);
+        tl.to(el, { clipPath: inset(y0, W - 560, H - y1, 0), duration: 0.8, ease: "power2.inOut" }, t0);
+      });
+      tl.set(actFull, { opacity: 1 }, 10.0);
+      tl.set(actRows, { opacity: 0 }, 10.0);
+      tl.fromTo(actFull, { filter: "blur(0px)" }, { filter: "blur(2px)", duration: 0.7, ease: "power2.inOut", immediateRender: false }, 10.6);
+
+      // ---- 11-14s: title as one group with a short overshoot; one pulse on the bulb ----
+      gsap.set("#title", { opacity: 0, transformOrigin: "400px 330px" });
+      tl.fromTo("#title", { scale: 0.88, y: 30 }, { scale: 1, y: 0, duration: 0.9, ease: "back.out(2.4)" }, 12.0);
+      tl.to("#title", { opacity: 1, duration: 0.3, ease: "none" }, 12.0);
+      gsap.set("#bulb", { clipPath: inset(365, W - 769, H - 463, 669), transformOrigin: "400px 330px" });
+      tl.to("#bulb", { keyframes: [
+        { opacity: 1, filter: "brightness(1.25) drop-shadow(0 0 10px rgba(255,226,90,.95))", duration: 0.35, ease: "sine.out" },
+        { opacity: 0, filter: "brightness(1) drop-shadow(0 0 0px rgba(255,226,90,0))", duration: 0.55, ease: "sine.in" },
+      ] }, 13.0);
+      tl.set("#bulb", { opacity: 0, filter: "none" }, 13.95);
+
+      // ---- clear every depth blur before the pull-back ----
+      tl.to(["#car-wrap", "#sign", "#date", actFull], { filter: "blur(0px)", duration: 0.8, ease: "power2.inOut" }, 12.4);
+      tl.set(["#car-wrap", "#sign", "#date", actFull], { filter: "none" }, 13.3);
+
+      // ---- 14-16s: logos and socials arrive as the frame widens ----
+      logoCols.forEach((c, i) => tl.fromTo(c, { y: -24 }, { y: 0, opacity: 1, duration: 0.6, ease: "power3.out" }, 14.2 + i * 0.1));
+      tl.set(logoFull, { opacity: 1 }, 15.2);
+      tl.set(logoCols, { opacity: 0 }, 15.2);
+      gsap.set("#foot", { opacity: 0 });
+      tl.fromTo("#foot", { y: 110 }, { y: 0, opacity: 1, duration: 0.9, ease: "power3.out" }, 14.4);
+
+      // ---- 16-20s: exact flyer image takes over; four seconds of stillness ----
+      tl.to("#poster", { opacity: 1, duration: 0.4, ease: "none" }, 15.7);
+
+      apply(0); applyRoutes(0);
+      window.__timelines["aasu"] = tl;
+    </script>
+  </body>
+</html>

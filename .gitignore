@@ -12,4 +12,10 @@ desktop.ini
 snapshots/
 node_modules/
 flyer/fit/
+**/fit/
+.hyperframes/
 .*.hf-transaction-*/
+
+# Adobe Premiere Pro scratch and cache
+Adobe Premiere Pro Audio Previews/
+Adobe Premiere Pro Auto-Save/
