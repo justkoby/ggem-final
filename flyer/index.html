@@ -39,7 +39,7 @@
         <!-- title: one locked group -->
         <img id="title" class="art tall" src="assets/main-climax-logo.svg" alt="" />
 
-        <div id="spons" class="crop" style="left:0;top:1240px;width:1080px;height:110px"></div>
+        <div id="spons" class="crop" style="left:0;top:1245px;width:1080px;height:105px"></div>
         <div id="logos"></div>
       </div>
       <img id="poster" class="full" src="assets/main-poster.jpg" alt="" style="position:absolute;opacity:0" />
@@ -53,9 +53,14 @@
 
       // Organisers and sponsors are cut into columns at the gaps between logos, revealed in a wave,
       // then swapped for the single original file so the settled layout is the untouched artwork.
-      function columns(host, src, cls, style, cuts, total) {
+      function columns(host, src, cls, style, cuts, total, band) {
         const edges = [0, ...cuts, total], cols = [];
-        const mk = (extra) => { const im = document.createElement("img"); im.className = cls; im.src = src; im.style.cssText = style + extra; host.appendChild(im); return im; };
+        const mk = (extra) => {
+          // band: the poster's white bar starts 6px above the sponsor SVG's own bar, so it is painted under the artwork as a CSS background
+          const im = document.createElement(band ? "div" : "img"); im.className = cls;
+          if (band) im.style.cssText = style + `height:1422.28px;background:url(${src}) 0 0/${total}px 1422.28px no-repeat, linear-gradient(#fff,#fff) 0 ${band}px/100% 8px no-repeat;` + extra; else { im.src = src; im.style.cssText = style + extra; }
+          host.appendChild(im); return im;
+        };
         const full = mk("opacity:0");
         for (let i = 0; i < edges.length - 1; i++) {
           const c = mk(`clip-path:${inset(0, total - edges[i + 1], 0, edges[i])};opacity:0`);
@@ -63,8 +68,8 @@
         }
         return { full, cols };
       }
-      const logos = columns($("logos"), "assets/logos-on-top.png", "", "position:absolute;left:290px;top:32px;width:474px;", [159, 398], 474);
-      const spons = columns($("spons"), "assets/partmer-sponsors.svg", "art tall", "top:-1240px;", [175, 263, 357, 465, 617, 762, 901, 1005], W);
+      const logos = columns($("logos"), "assets/logos-on-top-new.png", "", "position:absolute;left:260px;top:27px;width:560.16px;", [153, 383, 477], 560.16);
+      const spons = columns($("spons"), "assets/partmer-sponsors-new.svg", "", "position:absolute;left:-141px;top:-1271px;width:2389.49px;height:1422.28px;", [343, 423, 515, 661, 838, 927, 1039], 2389.49, 1274);
 
       // ---- one continuous camera: moves are summed, so overlaps carry momentum ----
       const WP = [[540, 880, 1.46], [545, 880, 1.5], [775, 705, 1.9], [305, 650, 2.2], [397, 470, 1.45], [540, 675, 1]];

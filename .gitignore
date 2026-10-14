@@ -11,4 +11,5 @@ desktop.ini
 # Animation project scratch
 snapshots/
 node_modules/
+flyer/fit/
 .*.hf-transaction-*/
